@@ -19,6 +19,11 @@ import SecurityIcon from '@mui/icons-material/Security';
 import { useAI } from '../context/AIContext'; 
 
 
+// --- DEFINE SECURE API ENDPOINT ---
+const API_BASE_URL = "https://safepath-r7sl.onrender.com"; 
+// ------------------------------------
+
+
 const AIChat = () => {
     const theme = useTheme();
     // Get persona from context to send to the backend
@@ -38,7 +43,7 @@ const AIChat = () => {
 
     useEffect(scrollToBottom, [messages]);
 
-    // --- UPDATED API Call Function: Calls Vercel Function /api/chat ---
+    // --- UPDATED API Call Function: Calls Render Proxy ---
     const fetchAIResponse = async (userMessage) => {
         
         // Format the entire history (excluding the initial welcome message) for the API
@@ -51,8 +56,8 @@ const AIChat = () => {
         messagesToSend.push({ role: "user", content: userMessage });
 
         try {
-            // CALL THE SECURE VERCEL SERVERLESS FUNCTION
-            const response = await fetch("/api/chat", {
+            // CALL THE SECURE RENDER BACKEND
+            const response = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -63,23 +68,35 @@ const AIChat = () => {
                 }),
             });
 
+            // --- Robust Error Check 1: Handle non-JSON response ---
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const textError = await response.text();
+                console.error("Server Returned Non-JSON Content:", textError);
+                // Return a clear error message to the user
+                return `Server Error (Code: ${response.status}): Expected AI response, but received an unexpected server message.`;
+            }
+            // ----------------------------------------------------
+            
             const data = await response.json();
 
+            // --- Robust Error Check 2: Handle JSON errors (e.g., API key failures on the backend) ---
             if (!response.ok) {
-                console.error("Vercel Function Error:", data);
-                return data.message || "Vercel function failed to respond. Check console for details.";
+                console.error("Backend Proxy Error (JSON):", data);
+                return data.message || "AI service failed to respond. Check console for details.";
             }
+            // ----------------------------------------------------
             
             // Return the final response from your backend function
             return data.response;
 
         } catch (error) {
             console.error("Frontend Fetch Error:", error);
-            return "Network Error: Could not reach the serverless function.";
+            return `Network Error: Could not reach the AI service at ${API_BASE_URL}.`;
         }
     };
     
-    // --- Send Handler ---
+    // --- Send Handler (unchanged) ---
     const handleSend = async () => {
         if (input.trim() === '' || isLoading) return;
 
@@ -98,7 +115,7 @@ const AIChat = () => {
         setIsLoading(false);
     };
 
-    // --- Message Bubble Component (Remains the same) ---
+    // --- Message Bubble Component (unchanged) ---
     const MessageBubble = React.memo(({ message }) => (
         <Box 
             sx={{ 
@@ -132,7 +149,7 @@ const AIChat = () => {
         </Box>
     ));
 
-    // --- Main Render (Remains the same) ---
+    // --- Main Render (unchanged) ---
     return (
         <Container maxWidth="sm" sx={{ py: 8 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>

@@ -13,12 +13,11 @@ import ErrorIcon from '@mui/icons-material/Error';
 import { useAI } from '../context/AIContext';
 
 
-// --- DEFINE SECURE API ENDPOINT (MUST BE UPDATED) ---
-const API_BASE_URL = "YOUR_RENDER_URL_HERE"; 
-// -----------------------------------------------------
+// --- DEFINE SECURE API ENDPOINT ---
+const API_BASE_URL = "https://safepath-r7sl.onrender.com"; 
+// ------------------------------------
 
 const fetchSafetyInsight = async (scenario, currentPersona) => {
-    // The utility is structured to send a full conversation context
     const messagesToSend = [{ role: "user", content: scenario }];
 
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -81,12 +80,6 @@ const AIAssessmentForm = () => {
             return;
         }
 
-        // Add client-side check if API_BASE_URL is still the placeholder
-        if (API_BASE_URL === "YOUR_RENDER_URL_HERE") {
-             setError('CRITICAL ERROR: Please update API_BASE_URL in AIAssessmentForm.js with your Render URL.');
-             return;
-        }
-
         setIsLoading(true);
 
         const fullScenarioInput = `
@@ -97,7 +90,7 @@ const AIAssessmentForm = () => {
         `;
 
         try {
-            // CALL THE NEW SECURE RENDER ENDPOINT
+            // CALL THE SECURE RENDER ENDPOINT
             const result = await fetchSafetyInsight(fullScenarioInput, persona);
             
             setInsight(result);

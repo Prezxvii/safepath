@@ -4,7 +4,6 @@ import React, { createContext, useState, useContext } from 'react';
 export const AIContext = createContext({
   persona: 'teenager', 
   setPersona: () => {},
-  // openRouterKey is removed/empty for security
 });
 
 // AI Provider Component
@@ -12,7 +11,6 @@ export function AIProvider({ children }) {
   const [persona, setPersona] = useState('teenager'); 
 
   // CRITICAL: The API key is fully removed from client-side code for security.
-  // It is now securely managed by the Render backend proxy.
   const openRouterKey = ''; 
 
   const contextValue = {

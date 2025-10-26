@@ -10,16 +10,12 @@ import ForumIcon from '@mui/icons-material/Forum';
 import CloseIcon from '@mui/icons-material/Close'; 
 import SendIcon from '@mui/icons-material/Send'; 
 
-// --- DEFINE SECURE API ENDPOINT (MUST BE UPDATED) ---
-const API_BASE_URL = "YOUR_RENDER_URL_HERE"; 
-// -----------------------------------------------------
+// --- DEFINE SECURE API ENDPOINT ---
+const API_BASE_URL = "https://safepath-r7sl.onrender.com"; 
+// ------------------------------------
 
-// --- NEW SECURE FETCH FUNCTION for Chat Widget ---
+// --- SECURE FETCH FUNCTION for Chat Widget ---
 const fetchChatResponse = async (messagesToSend, currentPersona) => {
-
-    if (API_BASE_URL === "YOUR_RENDER_URL_HERE") {
-        throw new Error('CRITICAL ERROR: Please update API_BASE_URL in ChatWidget.js with your Render URL.');
-    }
 
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
@@ -77,7 +73,7 @@ const ChatWidget = () => {
         ];
         
         try {
-            // CALL THE NEW SECURE RENDER ENDPOINT
+            // CALL THE SECURE RENDER ENDPOINT
             const insight = await fetchChatResponse(messagesForApi, persona);
 
             const aiResponse = { sender: 'ai', text: insight };
