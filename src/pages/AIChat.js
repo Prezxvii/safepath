@@ -15,17 +15,17 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
 
-// CRITICAL: Import the context hook to access the API key and persona
+// Import the context hook
 import { useAI } from '../context/AIContext'; 
 
 
 const AIChat = () => {
     const theme = useTheme();
-    // Get AI context values
-    const { openRouterKey, persona } = useAI(); 
+    // Get persona from context to send to the backend
+    const { persona } = useAI(); 
 
     const [messages, setMessages] = useState([
-        { id: 1, text: "Welcome! I'm SafePath AI. I can answer questions about route safety, general policies, and connect you to mental health resources.", sender: 'AI' }
+        { id: 1, text: `Welcome! I'm SafePath AI. I can answer questions about route safety, general policies, and connect you to mental health resources. (Persona: ${persona})`, sender: 'AI' }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -36,58 +36,46 @@ const AIChat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    // Scroll whenever messages update
     useEffect(scrollToBottom, [messages]);
 
-    // --- API Call Function ---
+    // --- UPDATED API Call Function: Calls Vercel Function /api/chat ---
     const fetchAIResponse = async (userMessage) => {
-        if (!openRouterKey) {
-            return "ERROR: AI Key not loaded. Please ensure REACT_APP_OPENROUTER_KEY is set in your .env.local file and restart the server.";
-        }
         
-        // Define the system prompt based on the user persona
-        const systemPrompt = `You are SafePath AI, a friendly, non-judgmental assistant for the NYC school community. 
-                              Your responses should be tailored to a ${persona} (e.g., student, parent). You specialize in answering questions about 
-                              NYC school safety, finding mental health resources, and interpreting data (like traffic/safety scores). 
-                              Keep responses concise and helpful.`;
-
-        // Format all previous messages and the new user message for the API
-        const messagesForAPI = [
-            { role: "system", content: systemPrompt },
-            ...messages.slice(1).map(msg => ({ 
-                role: msg.sender === 'User' ? 'user' : 'assistant', 
-                content: msg.text 
-            })),
-            { role: "user", content: userMessage },
-        ];
+        // Format the entire history (excluding the initial welcome message) for the API
+        const messagesToSend = messages.slice(1).map(msg => ({ 
+            role: msg.sender === 'User' ? 'user' : 'assistant', 
+            content: msg.text 
+        }));
+        
+        // Add the new user message
+        messagesToSend.push({ role: "user", content: userMessage });
 
         try {
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            // CALL THE SECURE VERCEL SERVERLESS FUNCTION
+            const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${openRouterKey}`,
                     "Content-Type": "application/json",
-                    // Required for OpenRouter to track usage
-                    "HTTP-Referer": window.location.href, 
                 },
                 body: JSON.stringify({
-                    "model": "mistralai/mistral-7b-instruct:free", // Reliable, fast, and free model for this use case
-                    "messages": messagesForAPI,
+                    messages: messagesToSend,
+                    persona: persona, // Send persona state to backend
                 }),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error("OpenRouter API Error:", errorData);
-                return `API Error: Could not get response. Status: ${response.status}. Check console for details.`;
-            }
-
             const data = await response.json();
-            return data.choices[0].message.content.trim();
+
+            if (!response.ok) {
+                console.error("Vercel Function Error:", data);
+                return data.message || "Vercel function failed to respond. Check console for details.";
+            }
+            
+            // Return the final response from your backend function
+            return data.response;
 
         } catch (error) {
-            console.error("Network or Fetch Error:", error);
-            return "Connection Error: Could not reach the AI service.";
+            console.error("Frontend Fetch Error:", error);
+            return "Network Error: Could not reach the serverless function.";
         }
     };
     
@@ -101,7 +89,7 @@ const AIChat = () => {
         setInput('');
         setIsLoading(true);
 
-        // 2. Fetch AI Response (Wait for the API call)
+        // 2. Fetch AI Response (Wait for the serverless function call)
         const responseText = await fetchAIResponse(newUserMessage.text);
         
         // 3. Add AI Message
@@ -110,8 +98,8 @@ const AIChat = () => {
         setIsLoading(false);
     };
 
-    // --- Message Bubble Component ---
-    const MessageBubble = ({ message }) => (
+    // --- Message Bubble Component (Remains the same) ---
+    const MessageBubble = React.memo(({ message }) => (
         <Box 
             sx={{ 
                 display: 'flex', 
@@ -142,9 +130,9 @@ const AIChat = () => {
                 {message.sender === 'User' && <PersonIcon sx={{ ml: 1, fontSize: 18, color: theme.palette.primary.dark, mt: 0.2 }} />}
             </Paper>
         </Box>
-    );
+    ));
 
-    // --- Main Render ---
+    // --- Main Render (Remains the same) ---
     return (
         <Container maxWidth="sm" sx={{ py: 8 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
@@ -156,7 +144,7 @@ const AIChat = () => {
                 <Paper 
                     elevation={6} 
                     sx={{ 
-                        height: '60vh', // Increased height slightly for better view
+                        height: '60vh',
                         display: 'flex', 
                         flexDirection: 'column', 
                         overflow: 'hidden',

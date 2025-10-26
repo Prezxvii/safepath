@@ -1,23 +1,48 @@
 import React, { useState } from 'react';
-import { Box, Card, CardHeader, IconButton, Fab, TextField, Button, Divider, Typography } from '@mui/material';
+import { Box, Card, CardHeader, IconButton, Fab, TextField, Button, Divider, Typography, CircularProgress, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 
 // Import AI Logic and Context
 import { useAI } from '../context/AIContext';
-import { getSafetyInsight } from '../utils/getSafetyInsight'; // Re-use the utility function
 
 // Import NEW Icons
 import ForumIcon from '@mui/icons-material/Forum'; 
 import CloseIcon from '@mui/icons-material/Close'; 
 import SendIcon from '@mui/icons-material/Send'; 
 
+
+// --- NEW SECURE FETCH FUNCTION for Chat Widget ---
+const fetchChatResponse = async (messagesToSend, currentPersona) => {
+    const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            messages: messagesToSend,
+            persona: currentPersona, 
+        }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        console.error("Vercel Function Error:", data);
+        return data.message || "Failed to fetch insight from AI service.";
+    }
+    
+    return data.response;
+};
+// ----------------------------------------------------------------------
+
+
 const ChatWidget = () => {
+    const theme = useTheme();
     const [isOpen, setIsOpen] = useState(false);
     const [message, setMessage] = useState('');
     const [conversation, setConversation] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    const { persona, openRouterKey } = useAI();
+    // Only need 'persona' from context. openRouterKey is NOT USED.
+    const { persona } = useAI();
     // Use a fixed alias for the chat context
     const alias = "Chat User"; 
 
@@ -25,27 +50,33 @@ const ChatWidget = () => {
         e.preventDefault();
         if (!message.trim() || isLoading) return;
 
-        const newMessage = { sender: 'user', text: message };
-        setConversation(prev => [...prev, newMessage]);
+        const newUserMessage = { sender: 'user', text: message };
+        
+        // 1. Update state with new user message
+        setConversation(prev => [...prev, newUserMessage]);
+        
+        // 2. Prepare full history for the API call (must use the new message too)
+        const messagesForApi = [
+            ...conversation.map(c => ({ 
+                role: c.sender === 'user' ? 'user' : 'assistant', 
+                content: c.text 
+            })),
+            { role: 'user', content: newUserMessage.text } // Include the message being sent
+        ];
+        
         setMessage('');
         setIsLoading(true);
 
-        // Concatenate all conversation history for context (simplified)
-        const fullScenario = conversation.map(c => `${c.sender}: ${c.text}`).join('\n') + `\nuser: ${message}`;
-        
         try {
-            const insight = await getSafetyInsight(
-                alias,
-                fullScenario, // Use conversation history as the scenario
-                persona,
-                openRouterKey
-            );
+            // CALL THE NEW SECURE FETCH FUNCTION
+            const insight = await fetchChatResponse(messagesForApi, persona);
 
             const aiResponse = { sender: 'ai', text: insight };
             setConversation(prev => [...prev, aiResponse]);
+
         } catch (error) {
             console.error('Chat failed:', error);
-            const errorResponse = { sender: 'ai', text: "Error: Could not fetch insight. Please check your network or API key." };
+            const errorResponse = { sender: 'ai', text: "Error: Could not fetch insight. Please check your network or Vercel function configuration." };
             setConversation(prev => [...prev, errorResponse]);
         } finally {
             setIsLoading(false);
@@ -70,7 +101,7 @@ const ChatWidget = () => {
                             sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', p: 1.5 }}
                             action={
                                 <IconButton onClick={() => setIsOpen(false)} sx={{ color: 'primary.contrastText' }}>
-                                    <CloseIcon /> {/* Icon for closing */}
+                                    <CloseIcon /> 
                                 </IconButton>
                             }
                         />
@@ -106,8 +137,8 @@ const ChatWidget = () => {
                             )}
                             {isLoading && (
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 1 }}>
-                                    <Typography variant="body2" sx={{ p: 1.5, borderRadius: 2, bgcolor: 'grey.200' }}>
-                                        *AI is typing...*
+                                    <Typography variant="body2" sx={{ p: 1.5, borderRadius: 2, bgcolor: 'grey.200', display: 'flex', alignItems: 'center' }}>
+                                        <CircularProgress size={12} sx={{ mr: 1 }} /> AI is typing...
                                     </Typography>
                                 </Box>
                             )}
@@ -128,7 +159,7 @@ const ChatWidget = () => {
                                 type="submit" 
                                 variant="contained" 
                                 color="primary" 
-                                disabled={isLoading}
+                                disabled={isLoading || message.trim() === ''}
                                 sx={{ minWidth: 50, px: 1 }}
                             >
                                 <SendIcon />
@@ -150,7 +181,7 @@ const ChatWidget = () => {
                     aria-label="chat" 
                     onClick={() => setIsOpen(true)}
                 >
-                    <ForumIcon /> {/* Icon for chat button */}
+                    <ForumIcon /> 
                 </Fab>
             </motion.div>
         </Box>

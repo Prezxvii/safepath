@@ -2,16 +2,41 @@ import React, { useState } from 'react';
 import { Box, Container, Typography, TextField, Select, MenuItem, Button, Card, CardContent, CircularProgress, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 
-// Import NEW Icons for persona selection
+// Import Icons
 import PersonIcon from '@mui/icons-material/Person';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import SchoolIcon from '@mui/icons-material/School';
 import PublicIcon from '@mui/icons-material/Public'; 
-import ErrorIcon from '@mui/icons-material/Error'; // For the error message
+import ErrorIcon from '@mui/icons-material/Error';
 
 // Import AI Logic and Context
 import { useAI } from '../context/AIContext';
-import { getSafetyInsight } from '../utils/getSafetyInsight';
+
+
+// --- NEW SECURE FETCH FUNCTION (Moved here from getSafetyInsight.js) ---
+const fetchSafetyInsight = async (scenario, currentPersona) => {
+    // We format the scenario into a single message for the AI
+    const messagesToSend = [{ role: "user", content: scenario }];
+
+    const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            messages: messagesToSend,
+            persona: currentPersona, 
+        }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        console.error("Vercel Function Error:", data);
+        throw new Error(data.message || "Failed to fetch insight from AI service.");
+    }
+    
+    return data.response;
+};
+// ----------------------------------------------------------------------
 
 
 const AIAssessmentForm = () => {
@@ -24,8 +49,8 @@ const AIAssessmentForm = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Use the AI context to get the key and persona
-    const { persona, setPersona, openRouterKey } = useAI();
+    // Only need 'persona' from context. openRouterKey is NOT USED.
+    const { persona, setPersona } = useAI(); 
     
     // --- ANIMATION VARIANTS for the Form ---
     const formContainerVariants = {
@@ -46,28 +71,26 @@ const AIAssessmentForm = () => {
             setError('Please fill in both your name/alias and safety scenario.');
             return;
         }
-        
-        if (!openRouterKey) {
-            setError("Error: AI Key is missing. Please check your AIContext configuration.");
-            return;
-        }
 
         setIsLoading(true);
 
+        // The input format needed for the AI function
+        const fullScenarioInput = `
+            User Name/Alias: ${name}
+            Safety Scenario: ${safetyScenario}
+            ---
+            Provide a detailed safety insight tailored for a ${persona}.
+        `;
+
         try {
-            // CALL THE AI UTILITY FUNCTION - using getSafetyInsight
-            const result = await getSafetyInsight(
-                name,
-                safetyScenario,
-                persona,
-                openRouterKey
-            );
+            // CALL THE NEW SECURE FETCH FUNCTION
+            const result = await fetchSafetyInsight(fullScenarioInput, persona);
             
             setInsight(result);
 
         } catch (err) {
             console.error('Submission failed:', err);
-            setError('An error occurred while fetching the safety insight. Please check the console for details.');
+            setError(err.message || 'An error occurred while fetching the safety insight. Please check the console for details.');
         } finally {
             setIsLoading(false);
         }
