@@ -13,35 +13,40 @@ import ErrorIcon from '@mui/icons-material/Error';
 import { useAI } from '../context/AIContext';
 
 
-// --- INSECURE DIRECT API CALL UTILITY (DO NOT USE IN PRODUCTION) ---
-const callOpenRouterAPI = async (scenario, currentPersona, key) => {
-    
-    const messages = [
-        { role: "system", content: `You are SafePath AI, a friendly, non-judgmental assistant for the NYC school community. Your responses should be tailored to a ${currentPersona}.` },
-        { role: "user", content: scenario }
-    ];
+// --- DEFINE SECURE API ENDPOINT (MUST BE UPDATED) ---
+const API_BASE_URL = "YOUR_RENDER_URL_HERE"; 
+// -----------------------------------------------------
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+const fetchSafetyInsight = async (scenario, currentPersona) => {
+    // The utility is structured to send a full conversation context
+    const messagesToSend = [{ role: "user", content: scenario }];
+
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
-        headers: {
-            "Authorization": `Bearer ${key}`,
-            "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            "model": "mistralai/mistral-7b-instruct:free", 
-            "messages": messages,
+            messages: messagesToSend,
+            persona: currentPersona, 
         }),
     });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `OpenRouter API failed with status ${response.status}`);
+    // --- Robust Error Handling ---
+    const contentType = response.headers.get('content-type');
+    if (!response.ok && (!contentType || !contentType.includes('application/json'))) {
+        const textError = await response.text();
+        console.error("Server Returned Non-JSON Content:", textError);
+        throw new Error(`Server Error (Code: ${response.status}): Could not reach the AI service.`);
     }
 
     const data = await response.json();
-    return data.choices[0].message.content.trim();
+
+    if (!response.ok) {
+        console.error("Backend Proxy Error:", data);
+        throw new Error(data.message || "Failed to fetch insight from AI service.");
+    }
+    
+    return data.response;
 };
-// ----------------------------------------------------------------------
 
 
 const AIAssessmentForm = () => {
@@ -54,15 +59,14 @@ const AIAssessmentForm = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Use the AI context to get the key and persona
-    const { persona, setPersona, openRouterKey } = useAI();
+    // Only need 'persona' from context. openRouterKey is NOT USED.
+    const { persona, setPersona } = useAI();
     
-    // --- ANIMATION VARIANTS for the Form ---
+    // ... (Animation variants unchanged) ...
     const formContainerVariants = {
         hidden: { opacity: 0, y: 50 },
         visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 50, delay: 0.5 } }
     };
-    // ----------------------------------------
 
     /**
      * Handles the form submission, calls the AI, and manages state.
@@ -76,10 +80,11 @@ const AIAssessmentForm = () => {
             setError('Please fill in both your name/alias and safety scenario.');
             return;
         }
-        
-        if (!openRouterKey) {
-            setError("Error: AI Key is missing. Check AIContext.");
-            return;
+
+        // Add client-side check if API_BASE_URL is still the placeholder
+        if (API_BASE_URL === "YOUR_RENDER_URL_HERE") {
+             setError('CRITICAL ERROR: Please update API_BASE_URL in AIAssessmentForm.js with your Render URL.');
+             return;
         }
 
         setIsLoading(true);
@@ -92,12 +97,8 @@ const AIAssessmentForm = () => {
         `;
 
         try {
-            // CALL THE INSECURE DIRECT API FUNCTION
-            const result = await callOpenRouterAPI(
-                fullScenarioInput,
-                persona,
-                openRouterKey
-            );
+            // CALL THE NEW SECURE RENDER ENDPOINT
+            const result = await fetchSafetyInsight(fullScenarioInput, persona);
             
             setInsight(result);
 
@@ -124,7 +125,7 @@ const AIAssessmentForm = () => {
                 <Card elevation={6} sx={{ p: 4, borderRadius: 3 }}>
                     <CardContent>
                         
-                        {/* === PERSONA SELECTION === */}
+                        {/* === PERSONA SELECTION (unchanged) === */}
                         <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Typography variant="h6" color="text.secondary">
                                 I need advice as a:
@@ -144,7 +145,7 @@ const AIAssessmentForm = () => {
                         </Box>
 
 
-                        {/* === INPUT FORM === */}
+                        {/* === INPUT FORM (unchanged) === */}
                         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             
                             <TextField
@@ -185,7 +186,7 @@ const AIAssessmentForm = () => {
                     </CardContent>
                 </Card>
 
-                {/* === OUTPUT AREA === */}
+                {/* === OUTPUT AREA (unchanged) === */}
                 <Box sx={{ mt: 4 }}>
                     {error && (
                         <Typography color="error" align="center" sx={{ my: 2 }}>

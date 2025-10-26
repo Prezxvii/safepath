@@ -1,95 +1,90 @@
 import React, { useState } from 'react';
-import { Box, Card, CardHeader, IconButton, Fab, TextField, Button, Divider, Typography, CircularProgress, useTheme } from '@mui/material';
+import { Box, Card, CardHeader, IconButton, Fab, TextField, Button, Divider, Typography, CircularProgress } from '@mui/material';
 import { motion } from 'framer-motion';
 
 // Import AI Logic and Context
 import { useAI } from '../context/AIContext';
 
-// Import NEW Icons
+// Import Icons
 import ForumIcon from '@mui/icons-material/Forum'; 
 import CloseIcon from '@mui/icons-material/Close'; 
 import SendIcon from '@mui/icons-material/Send'; 
 
+// --- DEFINE SECURE API ENDPOINT (MUST BE UPDATED) ---
+const API_BASE_URL = "YOUR_RENDER_URL_HERE"; 
+// -----------------------------------------------------
 
-// --- INSECURE DIRECT API CALL UTILITY (DO NOT USE IN PRODUCTION) ---
-const callOpenRouterAPI = async (messages, currentPersona, key) => {
-    
-    // Add the system prompt to the messages array
-    const messagesForAPI = [
-        { role: "system", content: `You are SafePath AI, a friendly, non-judgmental assistant for the NYC school community. Your responses should be tailored to a ${currentPersona}. Keep responses concise.` },
-        ...messages
-    ];
-    
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+// --- NEW SECURE FETCH FUNCTION for Chat Widget ---
+const fetchChatResponse = async (messagesToSend, currentPersona) => {
+
+    if (API_BASE_URL === "YOUR_RENDER_URL_HERE") {
+        throw new Error('CRITICAL ERROR: Please update API_BASE_URL in ChatWidget.js with your Render URL.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
-        headers: {
-            "Authorization": `Bearer ${key}`,
-            "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            "model": "mistralai/mistral-7b-instruct:free", 
-            "messages": messagesForAPI,
+            messages: messagesToSend,
+            persona: currentPersona, 
         }),
     });
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `OpenRouter API failed with status ${response.status}`);
+    // --- Robust Error Handling ---
+    const contentType = response.headers.get('content-type');
+    if (!response.ok && (!contentType || !contentType.includes('application/json'))) {
+        const textError = await response.text();
+        console.error("Server Returned Non-JSON Content:", textError);
+        throw new Error(`Server Error (Code: ${response.status}): Could not reach the AI service.`);
     }
 
     const data = await response.json();
-    return data.choices[0].message.content.trim();
+
+    if (!response.ok) {
+        console.error("Backend Proxy Error:", data);
+        throw new Error(data.message || "Failed to fetch insight from AI service.");
+    }
+    
+    return data.response;
 };
 // ----------------------------------------------------------------------
 
 
 const ChatWidget = () => {
-    const theme = useTheme();
     const [isOpen, setIsOpen] = useState(false);
     const [message, setMessage] = useState('');
     const [conversation, setConversation] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Get both persona and key from context
-    const { persona, openRouterKey } = useAI();
-    const alias = "Chat User"; 
-
+    const { persona } = useAI();
+    
     const handleSend = async (e) => {
         e.preventDefault();
         if (!message.trim() || isLoading) return;
-        if (!openRouterKey) return; // Should not happen if AIContext is updated
 
-        const newUserMessage = { sender: 'user', text: message };
-        
-        // 1. Update state with new user message
-        setConversation(prev => [...prev, newUserMessage]);
-        
-        // 2. Prepare full history for the API call
+        const newMessage = { sender: 'user', text: message };
+        setConversation(prev => [...prev, newMessage]);
+        setMessage('');
+        setIsLoading(true);
+
+        // Prepare full history for the API call (must use the new message too)
         const messagesForApi = [
             ...conversation.map(c => ({ 
                 role: c.sender === 'user' ? 'user' : 'assistant', 
                 content: c.text 
             })),
-            { role: 'user', content: newUserMessage.text } // Include the message being sent
+            { role: 'user', content: newMessage.text } // Include the message being sent
         ];
         
-        setMessage('');
-        setIsLoading(true);
-
         try {
-            // CALL THE INSECURE DIRECT API FUNCTION
-            const insight = await callOpenRouterAPI(
-                messagesForApi,
-                persona,
-                openRouterKey
-            );
+            // CALL THE NEW SECURE RENDER ENDPOINT
+            const insight = await fetchChatResponse(messagesForApi, persona);
 
             const aiResponse = { sender: 'ai', text: insight };
             setConversation(prev => [...prev, aiResponse]);
-
         } catch (error) {
             console.error('Chat failed:', error);
-            const errorResponse = { sender: 'ai', text: `Error: Could not fetch insight. Details: ${error.message}` };
+            const errorResponse = { sender: 'ai', text: `Error: ${error.message}` };
             setConversation(prev => [...prev, errorResponse]);
         } finally {
             setIsLoading(false);
