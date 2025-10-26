@@ -4,21 +4,21 @@ import React, { createContext, useState, useContext } from 'react';
 export const AIContext = createContext({
   persona: 'teenager', 
   setPersona: () => {},
-  openRouterKey: '', // Key is no longer provided here
+  openRouterKey: '', 
 });
 
 // AI Provider Component
 export function AIProvider({ children }) {
   const [persona, setPersona] = useState('teenager'); 
 
-  // CRITICAL FIX: The API key must be removed from client-side code for security.
-  // It is now handled exclusively and securely by the Vercel function (api/chat.js).
-  const openRouterKey = ''; 
+  // WARNING: This key is now exposed publicly in the browser's source code.
+  // It is only included here because you requested it.
+  const openRouterKey = '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'; 
 
   const contextValue = {
     persona,
     setPersona,
-    openRouterKey, // Still passed, but now an empty string
+    openRouterKey,
   };
 
   return (

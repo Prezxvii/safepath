@@ -13,28 +13,33 @@ import ErrorIcon from '@mui/icons-material/Error';
 import { useAI } from '../context/AIContext';
 
 
-// --- NEW SECURE FETCH FUNCTION (Moved here from getSafetyInsight.js) ---
-const fetchSafetyInsight = async (scenario, currentPersona) => {
-    // We format the scenario into a single message for the AI
-    const messagesToSend = [{ role: "user", content: scenario }];
+// --- INSECURE DIRECT API CALL UTILITY (DO NOT USE IN PRODUCTION) ---
+const callOpenRouterAPI = async (scenario, currentPersona, key) => {
+    
+    const messages = [
+        { role: "system", content: `You are SafePath AI, a friendly, non-judgmental assistant for the NYC school community. Your responses should be tailored to a ${currentPersona}.` },
+        { role: "user", content: scenario }
+    ];
 
-    const response = await fetch("/api/chat", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-            messages: messagesToSend,
-            persona: currentPersona, 
+            "model": "mistralai/mistral-7b-instruct:free", 
+            "messages": messages,
         }),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-        console.error("Vercel Function Error:", data);
-        throw new Error(data.message || "Failed to fetch insight from AI service.");
+        const errorData = await response.json();
+        throw new Error(errorData.message || `OpenRouter API failed with status ${response.status}`);
     }
-    
-    return data.response;
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
 };
 // ----------------------------------------------------------------------
 
@@ -49,8 +54,8 @@ const AIAssessmentForm = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Only need 'persona' from context. openRouterKey is NOT USED.
-    const { persona, setPersona } = useAI(); 
+    // Use the AI context to get the key and persona
+    const { persona, setPersona, openRouterKey } = useAI();
     
     // --- ANIMATION VARIANTS for the Form ---
     const formContainerVariants = {
@@ -71,10 +76,14 @@ const AIAssessmentForm = () => {
             setError('Please fill in both your name/alias and safety scenario.');
             return;
         }
+        
+        if (!openRouterKey) {
+            setError("Error: AI Key is missing. Check AIContext.");
+            return;
+        }
 
         setIsLoading(true);
 
-        // The input format needed for the AI function
         const fullScenarioInput = `
             User Name/Alias: ${name}
             Safety Scenario: ${safetyScenario}
@@ -83,8 +92,12 @@ const AIAssessmentForm = () => {
         `;
 
         try {
-            // CALL THE NEW SECURE FETCH FUNCTION
-            const result = await fetchSafetyInsight(fullScenarioInput, persona);
+            // CALL THE INSECURE DIRECT API FUNCTION
+            const result = await callOpenRouterAPI(
+                fullScenarioInput,
+                persona,
+                openRouterKey
+            );
             
             setInsight(result);
 

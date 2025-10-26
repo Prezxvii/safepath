@@ -11,25 +11,34 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send'; 
 
 
-// --- NEW SECURE FETCH FUNCTION for Chat Widget ---
-const fetchChatResponse = async (messagesToSend, currentPersona) => {
-    const response = await fetch("/api/chat", {
+// --- INSECURE DIRECT API CALL UTILITY (DO NOT USE IN PRODUCTION) ---
+const callOpenRouterAPI = async (messages, currentPersona, key) => {
+    
+    // Add the system prompt to the messages array
+    const messagesForAPI = [
+        { role: "system", content: `You are SafePath AI, a friendly, non-judgmental assistant for the NYC school community. Your responses should be tailored to a ${currentPersona}. Keep responses concise.` },
+        ...messages
+    ];
+    
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Authorization": `Bearer ${key}`,
+            "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-            messages: messagesToSend,
-            persona: currentPersona, 
+            "model": "mistralai/mistral-7b-instruct:free", 
+            "messages": messagesForAPI,
         }),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-        console.error("Vercel Function Error:", data);
-        return data.message || "Failed to fetch insight from AI service.";
+        const errorData = await response.json();
+        throw new Error(errorData.message || `OpenRouter API failed with status ${response.status}`);
     }
-    
-    return data.response;
+
+    const data = await response.json();
+    return data.choices[0].message.content.trim();
 };
 // ----------------------------------------------------------------------
 
@@ -41,21 +50,21 @@ const ChatWidget = () => {
     const [conversation, setConversation] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Only need 'persona' from context. openRouterKey is NOT USED.
-    const { persona } = useAI();
-    // Use a fixed alias for the chat context
+    // Get both persona and key from context
+    const { persona, openRouterKey } = useAI();
     const alias = "Chat User"; 
 
     const handleSend = async (e) => {
         e.preventDefault();
         if (!message.trim() || isLoading) return;
+        if (!openRouterKey) return; // Should not happen if AIContext is updated
 
         const newUserMessage = { sender: 'user', text: message };
         
         // 1. Update state with new user message
         setConversation(prev => [...prev, newUserMessage]);
         
-        // 2. Prepare full history for the API call (must use the new message too)
+        // 2. Prepare full history for the API call
         const messagesForApi = [
             ...conversation.map(c => ({ 
                 role: c.sender === 'user' ? 'user' : 'assistant', 
@@ -68,15 +77,19 @@ const ChatWidget = () => {
         setIsLoading(true);
 
         try {
-            // CALL THE NEW SECURE FETCH FUNCTION
-            const insight = await fetchChatResponse(messagesForApi, persona);
+            // CALL THE INSECURE DIRECT API FUNCTION
+            const insight = await callOpenRouterAPI(
+                messagesForApi,
+                persona,
+                openRouterKey
+            );
 
             const aiResponse = { sender: 'ai', text: insight };
             setConversation(prev => [...prev, aiResponse]);
 
         } catch (error) {
             console.error('Chat failed:', error);
-            const errorResponse = { sender: 'ai', text: "Error: Could not fetch insight. Please check your network or Vercel function configuration." };
+            const errorResponse = { sender: 'ai', text: `Error: Could not fetch insight. Details: ${error.message}` };
             setConversation(prev => [...prev, errorResponse]);
         } finally {
             setIsLoading(false);
